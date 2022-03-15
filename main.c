@@ -8,6 +8,10 @@
 #include "include/Players/Players.h"
 #include "include/Maps/Maps.h"
 #include "include/Monsters/Monsters.h"
+#include <linux/joystick.h>
+#include <fcntl.h>
+#include <unistd.h>
+
 
 
 bool initialize(void);
@@ -33,6 +37,37 @@ const int MAP_DEFAULT_WIDTH = 1600;
 Monster *monsters;
 const int NUM_OF_MONSTERS = 1;
 const int CHANCE_OF_MONSTER_SPAWN = 100;
+
+//Controller
+int fd;
+struct js_event jse;
+
+int open_joystick(char *device_name) {
+    int file_descriptor = -1;
+
+    if (device_name == NULL) {
+        return file_descriptor;
+    }
+
+    file_descriptor = open(device_name, O_RDONLY | O_NONBLOCK);
+
+    if (file_descriptor < 0) {
+        printf("Could not locate joystick device %s\n", device_name);
+        exit(1);
+    }
+    return file_descriptor;
+}
+
+void print_device_info(int fd) {
+    int axes = 0, buttons = 0;
+    char name[128];
+
+    ioctl(fd, JSIOCGAXES, &axes);
+    ioctl(fd, JSIOCGBUTTONS, &buttons);
+    ioctl(fd, JSIOCGNAME(sizeof(name)), &name);
+
+    printf("%s\n  %d Axes %d Buttons\n", name, axes, buttons);
+}
 
 //GameMaster
 /*
@@ -98,6 +133,10 @@ int main() {
                             addNewBullet(player1, event.button.x, event.button.y);
                             break;
                     }
+//                    read(fd, &jse, sizeof(jse));
+//                    if (jse.number == 5 && jse.value == -32767) {
+//                        addNewBullet(player1, 0, 0);
+//                    }
                 }
                 uint32_t curTick = SDL_GetTicks();
                 uint32_t diff = curTick - lastTick;
@@ -173,21 +212,8 @@ bool initialize() {
     player1 = makeNewPlayer(maps.width / 2, maps.height / 2);
     monsters = createArrayOfMonsters(NUM_OF_MONSTERS);
 
-    SDL_GameController *controller = NULL;
-    for (int i = 0; i < SDL_NumJoysticks(); ++i) {
-        printf("arrived here1\n");
-
-        if (SDL_IsGameController(i)) {
-            printf("arrived here2\n");
-
-            controller = SDL_GameControllerOpen(i);
-            if (controller) {
-                printf("Controller found here at %d\n", i);
-            } else {
-                fprintf(stderr, "Could not open gamecontroller %i: %s\n", i, SDL_GetError());
-            }
-        }
-    }
+    fd = open_joystick("/dev/input/js0");
+    print_device_info(fd);
 
     return true;
 }
@@ -202,7 +228,7 @@ void update(float elapsed) {
     int yOffSetToCenter = (SCREEN_HEIGHT / 2) - (maps.height / 2);
     updatePlayers(&player1, numOfPlayers, elapsed, map_array,
                   MAP_DEFAULT_WIDTH, MAP_DEFAULT_HEIGHT,
-                  xOffSetToCenter, yOffSetToCenter);
+                  xOffSetToCenter, yOffSetToCenter, fd, jse);
     renderPlayers(&renderer, &player1, 1);
 //    randomlyGenerateMonster(monsters, CHANCE_OF_MONSTER_SPAWN, NUM_OF_MONSTERS,
 //                            xOffSetToCenter, SCREEN_WIDTH - xOffSetToCenter,
